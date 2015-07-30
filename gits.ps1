@@ -38,15 +38,18 @@ function Get-Repositories {
     }
 
     $result = @()
-    $folders = (dir "$baseDir\.git-*" -Attributes hidden,directory)
-    if ($folders ) {
-        $result = ($folders).Name.SubString(5)
-    }
+     
     $singleDir = (dir "$baseDir\.git" -Attributes hidden,directory -ea silentlycontinue) 
     if( $singleDir ) {
         $result += "."
     }
-    return $result;
+    
+    $folders = (dir "$baseDir\.git-*" -Attributes hidden,directory)
+    if ($folders ) {
+        $result += @( ($folders).Name.SubString(5) )
+    }
+   
+    return (flatten $result)
     
 }
 
@@ -135,10 +138,12 @@ function Get-RepositoryName {
 
 function Get-UntrackedFilesImpl {
     Param( [Parameter(Position=0)] [string]$index )
-    $untracked = ((CallGit $index status --porcelain) |? { $_.startswith("??") } )
+    $untracked = ((CallGit $index status --porcelain --untracked-files=all) |? { $_.startswith("??") } ) |% { $_.substring(3) }
+    
     if( $untracked ) {
-        return $untracked.SubString(3) 
+        return $untracked
     }
+    return @()
 }
 
 function Indent-Text {
@@ -210,8 +215,17 @@ function Get-UntrackedFiles {
             $untracked = (Compare-Object $untracked $files -PassThru -IncludeEqual -ExcludeDifferent)
         } else {
             $untracked = get-untrackedfilesimpl $_ 
-            $files = (dir "$(Get-BaseDir)\.git*" -attributes directory,hidden).Name |% {"$_/" }
-            $untracked = $untracked |? { $files -notcontains $_ }
+            $files = (dir "$(Get-BaseDir)\.git*" -attributes directory,hidden ).Name 
+            $untracked = $untracked |? { $files -notcontains $_ } |? { 
+                $keep = $true
+                foreach( $f in $files ) {
+                    if( $_.StartsWith($f+"/") ) {
+                        $keep= $false
+                        break;
+                    }
+                }
+                $keep
+            }
         }
     }
     return $untracked
