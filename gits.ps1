@@ -78,18 +78,39 @@ function Get-GitBase {
     exit;
 }
 
+function Flatten {
+    Param(  [Parameter(Position=0)][object[]]$rgs )
+    
+    foreach( $i in $rgs ) {
+        if( $i ) {
+            if ( $i.Count -gt 1 ) {
+                Flatten $i
+            } else {
+                $i
+            }
+        }
+    }
+}
+
 function CallGit {
     Param( 
         [Parameter(Position=0)][string]$index ,
         [Parameter(Position=1)][String[]]$rgs,
-        [Parameter(Mandatory=$false,ValueFromRemainingArguments=$true)][String[]]$moreargs
+        [Parameter(Mandatory=$false,ValueFromRemainingArguments=$true)][object[]]$moreargs
     )
-    $a = $(Get-GitBase $index)  + $rgs + $moreargs
+    $a = $(Get-GitBase $index)  
+    
+    $a += Flatten $rgs
+    $a += Flatten $moreargs
+    
+ 
+    $a= ($a |% { "`"$_`"" }  )
+    
     
     #write-host $a.length $a.count
     write-debug "git.exe $a"
     
-    #$r = (& git $a)
+    #$r = (&git $a)
     #write-host $r
     #return $r
     return git.exe $a
@@ -287,13 +308,12 @@ function GitAll {
 
 
 if( $index ) {
-    if( $rgs ) {
-        $rgs = ($rgs |% { "`"$_`"" }  )
+
+    if( -not $rgs ) {
+       $rgs = @()
     }
-    else {
-        $rgs = @()
-    }
-    
+
+
     Switch( $index )  {
         "status" { return GitStatus $rgs }
         "commit" { return GitCommit $rgs }
@@ -305,16 +325,15 @@ if( $index ) {
 
     # Special Cases where we need to intervene
     Switch( $rgs[0] ) {
-        '"init"'    { return GitInit $rgs }
-        '"clone"'   { return GitClone $rgs }
+        "init"    { return GitInit $rgs }
+        "clone"   { return GitClone $rgs }
     }
-    
     $base = (Get-GitBase $index)
     
     write-reponame $index
-    if( ( $rgs[0] -eq '"commit"' ) -or ($rgs[0] -eq '"status"')) {
+    if( ( $rgs[0] -eq "commit" ) -or ($rgs[0] -eq "status") ) {
 
-        CallGit $index $rgs  "--untracked-files=no"  | Indent-Text | Write-WithColor
+        CallGit $index $rgs "--untracked-files=no"  | Indent-Text | Write-WithColor
         Get-UntrackedFiles | Write-UntrackedFiles 
         return;
     }
